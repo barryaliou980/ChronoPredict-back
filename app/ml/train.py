@@ -1,36 +1,19 @@
 """Script d'entraînement des modèles de prédiction de maladies chroniques."""
 
-import os
 import sys
 from pathlib import Path
 
 import joblib
-import pandas as pd
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, classification_report, f1_score
+from sklearn.metrics import accuracy_score, f1_score
 from sklearn.model_selection import train_test_split
 
-from app.ml.preprocess import create_preprocessor, load_and_prepare_data
+from app.ml.preprocess import load_and_prepare_data
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = BASE_DIR / "data"
 MODELS_DIR = BASE_DIR / "models"
-
-
-def find_dataset() -> str:
-    """Find the diabetes CSV dataset in the data directory."""
-    target = DATA_DIR / "diabetes_data.csv"
-    if target.exists():
-        return str(target)
-    csv_files = list(DATA_DIR.glob("*.csv"))
-    if not csv_files:
-        print(f"Erreur: Aucun fichier CSV trouvé dans {DATA_DIR}")
-        print("Téléchargez le dataset depuis:")
-        print("https://www.kaggle.com/datasets/prosperchuks/health-dataset")
-        print(f"et placez les fichiers CSV dans {DATA_DIR}/")
-        sys.exit(1)
-    return str(csv_files[0])
 
 
 def train():
@@ -39,25 +22,32 @@ def train():
     print("  Entraînement des modèles de prédiction")
     print("=" * 60)
 
-    # Load data
-    csv_path = find_dataset()
-    print(f"\nDataset: {csv_path}")
+    train_path = DATA_DIR / "Training.csv"
+    test_path = DATA_DIR / "Testing.csv"
 
-    X, y = load_and_prepare_data(csv_path)
-    print(f"Échantillons: {len(X)}")
-    print(f"Features: {X.shape[1]}")
-    print(f"Classes: {y.unique().tolist()}")
+    if not train_path.exists():
+        print(f"Erreur: {train_path} introuvable")
+        print("Téléchargez le dataset depuis:")
+        print("https://www.kaggle.com/datasets/kaushil268/disease-prediction-using-machine-learning")
+        print(f"et placez les fichiers CSV dans {DATA_DIR}/")
+        sys.exit(1)
 
-    # Split data
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
+    X_train_full, y_train_full, label_encoder, X_test_provided, y_test_provided = (
+        load_and_prepare_data(
+            str(train_path), str(test_path) if test_path.exists() else None
+        )
     )
-    print(f"\nTrain: {len(X_train)} | Test: {len(X_test)}")
 
-    # Create preprocessor and fit on training data
-    preprocessor = create_preprocessor()
-    X_train_processed = preprocessor.fit_transform(X_train)
-    X_test_processed = preprocessor.transform(X_test)
+    print(f"\nDataset: {train_path}")
+    print(f"Échantillons: {len(X_train_full)}")
+    print(f"Symptômes: {X_train_full.shape[1]}")
+    print(f"Maladies: {len(label_encoder.classes_)}")
+
+    # Split training data
+    X_train, X_val, y_train, y_val = train_test_split(
+        X_train_full, y_train_full, test_size=0.2, random_state=42, stratify=y_train_full
+    )
+    print(f"\nTrain: {len(X_train)} | Validation: {len(X_val)}")
 
     # Define models
     models = {
@@ -65,10 +55,10 @@ def train():
             max_iter=1000, random_state=42
         ),
         "Random Forest": RandomForestClassifier(
-            n_estimators=300, max_depth=10, random_state=42, n_jobs=-1
+            n_estimators=200, random_state=42, n_jobs=-1
         ),
         "Gradient Boosting": GradientBoostingClassifier(
-            n_estimators=300, max_depth=5, learning_rate=0.1, random_state=42
+            n_estimators=200, random_state=42
         ),
     }
 
@@ -79,22 +69,21 @@ def train():
     best_name = ""
 
     print("\n" + "=" * 60)
-    print("  Résultats")
+    print("  Résultats (Validation)")
     print("=" * 60)
 
     for name, model in models.items():
         print(f"\n--- {name} ---")
-        model.fit(X_train_processed, y_train)
-        y_pred = model.predict(X_test_processed)
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_val)
 
-        accuracy = accuracy_score(y_test, y_pred)
-        f1 = f1_score(y_test, y_pred, average="weighted")
+        accuracy = accuracy_score(y_val, y_pred)
+        f1 = f1_score(y_val, y_pred, average="weighted")
 
         results[name] = {"accuracy": accuracy, "f1": f1}
 
         print(f"Accuracy: {accuracy:.4f}")
         print(f"F1-score: {f1:.4f}")
-        print(classification_report(y_test, y_pred))
 
         if f1 > best_score:
             best_score = f1
@@ -114,17 +103,26 @@ def train():
         )
     print(f"\n* Meilleur modèle: {best_name}")
 
-    # Save best model and preprocessor
+    # Retrain best model on full training data
+    print(f"\nRé-entraînement de {best_name} sur toutes les données...")
+    best_model.fit(X_train_full, y_train_full)
+
+    # Test on provided test set
+    if X_test_provided is not None and y_test_provided is not None:
+        y_test_pred = best_model.predict(X_test_provided)
+        test_acc = accuracy_score(y_test_provided, y_test_pred)
+        print(f"Accuracy sur le jeu de test: {test_acc:.4f}")
+
+    # Save model, label encoder, and symptom list
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
 
-    model_path = MODELS_DIR / "best_model.joblib"
-    preprocessor_path = MODELS_DIR / "preprocessor.joblib"
+    joblib.dump(best_model, MODELS_DIR / "best_model.joblib")
+    joblib.dump(label_encoder, MODELS_DIR / "label_encoder.joblib")
+    joblib.dump(list(X_train_full.columns), MODELS_DIR / "symptoms.joblib")
 
-    joblib.dump(best_model, model_path)
-    joblib.dump(preprocessor, preprocessor_path)
-
-    print(f"\nModèle sauvegardé: {model_path}")
-    print(f"Preprocessor sauvegardé: {preprocessor_path}")
+    print(f"\nModèle sauvegardé: {MODELS_DIR / 'best_model.joblib'}")
+    print(f"Label encoder sauvegardé: {MODELS_DIR / 'label_encoder.joblib'}")
+    print(f"Symptômes sauvegardés: {MODELS_DIR / 'symptoms.joblib'}")
     print("\nTerminé!")
 
 

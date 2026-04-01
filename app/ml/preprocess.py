@@ -1,92 +1,34 @@
 import pandas as pd
-from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import StandardScaler
-
-FEATURE_COLUMNS = [
-    "age",
-    "sex",
-    "high_chol",
-    "chol_check",
-    "bmi",
-    "smoker",
-    "phys_activity",
-    "fruits",
-    "veggies",
-    "hvy_alcohol_consump",
-    "gen_hlth",
-    "ment_hlth",
-    "phys_hlth",
-    "diff_walk",
-]
-
-COLUMN_MAPPING = {
-    "Age": "age",
-    "Sex": "sex",
-    "HighChol": "high_chol",
-    "CholCheck": "chol_check",
-    "BMI": "bmi",
-    "Smoker": "smoker",
-    "PhysActivity": "phys_activity",
-    "Fruits": "fruits",
-    "Veggies": "veggies",
-    "HvyAlcoholConsump": "hvy_alcohol_consump",
-    "GenHlth": "gen_hlth",
-    "MentHlth": "ment_hlth",
-    "PhysHlth": "phys_hlth",
-    "DiffWalk": "diff_walk",
-}
-
-DISEASE_CLASSES = {
-    0: "Healthy",
-    1: "Single Condition",
-    2: "Multiple Conditions",
-}
+from sklearn.preprocessing import LabelEncoder
 
 
-def create_preprocessor() -> ColumnTransformer:
-    """Create a preprocessing pipeline with scaling."""
-    preprocessor = ColumnTransformer(
-        transformers=[
-            ("num", StandardScaler(), FEATURE_COLUMNS),
-        ]
-    )
-    return preprocessor
+def load_and_prepare_data(
+    train_path: str, test_path: str | None = None
+) -> tuple[pd.DataFrame, pd.Series, LabelEncoder, pd.DataFrame | None, pd.Series | None]:
+    """Load CSVs and return features + target (all diseases)."""
+    df_train = pd.read_csv(train_path)
 
+    if "Unnamed: 133" in df_train.columns:
+        df_train = df_train.drop(columns=["Unnamed: 133"])
 
-def _assign_class(row) -> int:
-    """Assign a multi-class target from binary disease columns."""
-    conditions = sum([
-        row["Diabetes"] == 1,
-        row["HighBP"] == 1,
-        row["Stroke"] == 1,
-        row["HeartDiseaseorAttack"] == 1,
-    ])
-    if conditions == 0:
-        return 0  # Healthy
-    if conditions == 1:
-        return 1  # Single Condition
-    return 2  # Multiple Conditions
+    df_train["prognosis"] = df_train["prognosis"].str.strip()
 
+    symptom_cols = [c for c in df_train.columns if c != "prognosis"]
 
-def load_and_prepare_data(csv_path: str) -> tuple[pd.DataFrame, pd.Series]:
-    """Load the diabetes CSV and return features + multi-class target."""
-    df = pd.read_csv(csv_path)
+    le = LabelEncoder()
+    le.fit(sorted(df_train["prognosis"].unique()))
 
-    # Create multi-class target
-    df["target"] = df.apply(_assign_class, axis=1)
+    X_train = df_train[symptom_cols].astype(float)
+    y_train = pd.Series(le.transform(df_train["prognosis"]))
 
-    # Balance classes by undersampling to the smallest class size
-    min_count = df["target"].value_counts().min()
-    balanced_dfs = []
-    for cls in df["target"].unique():
-        cls_df = df[df["target"] == cls].sample(n=min_count, random_state=42)
-        balanced_dfs.append(cls_df)
-    df = pd.concat(balanced_dfs, ignore_index=True)
+    X_test, y_test = None, None
+    if test_path:
+        df_test = pd.read_csv(test_path)
+        if "Unnamed: 133" in df_test.columns:
+            df_test = df_test.drop(columns=["Unnamed: 133"])
+        df_test["prognosis"] = df_test["prognosis"].str.strip()
 
-    # Rename columns
-    df = df.rename(columns=COLUMN_MAPPING)
+        X_test = df_test[symptom_cols].astype(float)
+        y_test = pd.Series(le.transform(df_test["prognosis"]))
 
-    X = df[FEATURE_COLUMNS]
-    y = df["target"]
-
-    return X, y
+    return X_train, y_train, le, X_test, y_test
