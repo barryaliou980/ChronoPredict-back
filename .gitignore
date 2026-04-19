@@ -3,6 +3,7 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
-data/*.csv
+data/
+*.zip
 models/*.joblib
 .env
