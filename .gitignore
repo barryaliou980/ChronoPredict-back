@@ -5,5 +5,5 @@ venv/
 *.egg-info/
 data/
 *.zip
-models/*.joblib
+models/*
 .env
