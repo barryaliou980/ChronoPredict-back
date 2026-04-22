@@ -21,6 +21,7 @@ class PredictionResult(BaseModel):
 class SymptomsListResponse(BaseModel):
     symptoms: list[str] = Field(..., description="Liste de tous les symptômes disponibles")
 
+<<<<<<< HEAD
 
 # --- Schémas pour la prédiction par image ---
 
@@ -67,3 +68,9 @@ class DiseaseMappingResponse(BaseModel):
     mapping: dict[str, str] = Field(
         ..., description="Correspondance maladie -> type de modèle d'image"
     )
+=======
+class XRayPredictionResponse(BaseModel):
+    nom_fichier: str = Field(..., description="Nom du fichier image analysé")
+    diagnostic: str = Field(..., description="Résultat du diagnostic: Normal ou Pneumonie")
+    confiance: str = Field(..., description="Pourcentage de certitude de l'IA (ex: 98.50%)")
+>>>>>>> develop

@@ -3,5 +3,11 @@ __pycache__/
 .venv/
 venv/
 *.egg-info/
+<<<<<<< HEAD
 data/*.csv
 .env
+=======
+data/
+*.zip
+.env
+>>>>>>> develop
