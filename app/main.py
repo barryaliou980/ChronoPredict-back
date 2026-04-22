@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import health, predict
+from app.routers import health, predict, predict_image
 
 app = FastAPI(
     title="Chronic Disease Prediction API",
@@ -19,3 +19,4 @@ app.add_middleware(
 
 app.include_router(health.router, prefix="/api", tags=["Health"])
 app.include_router(predict.router, prefix="/api", tags=["Prediction"])
+app.include_router(predict_image.router, prefix="/api", tags=["Image Prediction"])
