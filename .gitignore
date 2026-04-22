@@ -5,5 +5,4 @@ venv/
 *.egg-info/
 data/
 *.zip
-models/*
 .env
